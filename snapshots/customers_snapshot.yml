@@ -1,0 +1,9 @@
+version: 2
+
+snapshots:
+  - name: dim_customers_scd2
+    relation: ref('slr_customers')
+    config:
+      unique_key: customer_id
+      strategy: timestamp
+      updated_at: source_updated_at

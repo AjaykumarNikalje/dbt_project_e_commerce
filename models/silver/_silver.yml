@@ -1,0 +1,203 @@
+version: 2
+models:
+- name: slr_customers
+  description: Current customers state merged from validated batch staging.
+  config:
+    materialized: incremental
+    incremental_strategy: merge
+    unique_key: customer_id
+    file_format: delta
+    on_schema_change: fail
+    docs:
+      show: true
+      node_color: '#C0C0C0'
+    access: public
+    merge_exclude_columns:
+    - slr_ingested_at
+  columns:
+  - name: customer_id
+    description: primary key, unique and not null
+    data_type: int
+    constraints:
+    - type: not_null
+  - name: customer_name
+    description: customer full name
+    data_type: string
+    constraints:
+    - type: not_null
+    config:
+      meta:
+        contains_pii: true
+  - name: email
+    description: email description
+    data_type: string
+    constraints:
+    - type: not_null
+  - name: country
+    data_type: string
+    constraints:
+    - type: not_null
+  - name: segment
+    data_type: string
+    constraints:
+    - type: not_null
+  - name: is_deleted
+    data_type: boolean
+  - name: signup_date
+    data_type: date
+    constraints:
+    - type: not_null
+  - name: source_inserted_at
+    data_type: timestamp
+    constraints:
+    - type: not_null
+  - name: source_updated_at
+    data_type: timestamp
+    constraints:
+    - type: not_null
+  - name: brz_ingested_at
+    data_type: timestamp
+    constraints:
+    - type: not_null
+  - name: slr_ingested_at
+    data_type: timestamp
+    constraints:
+    - type: not_null
+  - name: slr_updated_at
+    data_type: timestamp
+    constraints:
+    - type: not_null
+  - name: batch_id
+    data_type: string
+  - name: operation_type
+    data_type: string
+  - name: source_file
+    data_type: string
+    constraints:
+    - type: not_null
+  data_tests:
+  - unique_columns:
+      arguments:
+        columns:
+        - customer_id
+        - email
+  - silver_gold_rules:
+      arguments:
+        target_model: dim_customers
+        required_columns:
+        - customer_id
+        - customer_name
+        - email
+        - country
+        - segment
+        - signup_date
+        - slr_updated_at
+        accepted_values:
+          segment:
+          - STANDARD
+          - PREMIUM
+- name: slr_orders
+  description: Current orders state merged from validated batch staging.
+  config:
+    materialized: incremental
+    incremental_strategy: merge
+    unique_key: order_id
+    file_format: delta
+    on_schema_change: fail
+    contract:
+      enforced: true
+    docs:
+      show: true
+      node_color: '#C0C0C0'
+    access: public
+    merge_exclude_columns:
+    - slr_ingested_at
+  columns:
+  - name: order_id
+    description: Order identifier; may repeat across source events.
+    data_type: int
+    constraints:
+    - type: not_null
+  - name: customer_id
+    description: Customer placing the order; relationship validated in Silver.
+    data_type: int
+    constraints:
+    - type: not_null
+    data_tests:
+    - relationships:
+        arguments:
+          to: ref('slr_customers')
+          field: customer_id
+  - name: amount
+    description: Raw amount; converted to decimal(18,2) and validated in Silver.
+    data_type: decimal(18,2)
+    constraints:
+    - type: not_null
+    - type: check
+      expression: amount >= 0 AND amount <= 100000
+  - name: status
+    data_type: string
+    constraints:
+    - type: not_null
+  - name: source_inserted_at
+    description: Raw order date/time; converted and validated in Silver.
+    data_type: timestamp
+    constraints:
+    - type: not_null
+  - name: source_updated_at
+    description: Source change date/time; timestamp validity checked by preflight.
+    data_type: timestamp
+    constraints:
+    - type: not_null
+  - name: brz_ingested_at
+    description: Timestamp generated when the pipeline loads the event.
+    data_type: timestamp
+    constraints:
+    - type: not_null
+  - name: slr_ingested_at
+    data_type: timestamp
+    constraints:
+    - type: not_null
+  - name: slr_updated_at
+    data_type: timestamp
+    constraints:
+    - type: not_null
+  - name: batch_id
+    description: Source batch identifier.
+    data_type: string
+    constraints:
+    - type: not_null
+  - name: operation_type
+    description: INSERT or UPDATE; validated by preflight.
+    data_type: string
+  - name: source_file
+    description: Source filename.
+    data_type: string
+    constraints:
+    - type: not_null
+  data_tests:
+  - unique_columns:
+      arguments:
+        columns:
+        - order_id
+  - silver_gold_rules:
+      arguments:
+        target_model: fact_orders
+        required_columns:
+        - order_id
+        - customer_id
+        - amount
+        - status
+        - source_inserted_at
+        - source_updated_at
+        - slr_updated_at
+        accepted_values:
+          status:
+          - PLACED
+          - COMPLETED
+          - CANCELLED
+          - REFUNDED
+        range_checks:
+          amount:
+            min: 0
+            max: 100000
